@@ -1,0 +1,229 @@
+---
+title: "HairEyeColor test for Independence"
+format: html
+editor: visual
+---
+
+Hey!
+
+Today, we’ll examine a data set that includes the sex, hair color, and eye color of 592 statistics students from the University of Delaware in 1974. We’ll use a Chi-Square test for independence to determine whether hair color, sex, and eye color are independent of each other.
+
+## *Hair Color & Eye Color*
+
+To start, we’ll focus on the relationship between hair color and eye color. The table below shows the distribution of eye color for each hair color. If hair color and eye color were independent, we would expect the distribution of eye color to be similar across the different hair colors. This doesn’t mean that each eye color should make up exactly 25% of the total, but rather that a certain eye color, like brown, shouldn’t be significantly more common among people with one hair color (e.g., brown hair) and much less common among those with another hair color (e.g., blonde hair). If we observe such discrepancies, it suggests that hair color and eye color are not independent.
+
+```{r, echo=FALSE}
+
+suppressPackageStartupMessages(library(dplyr))
+library(pwr)
+library(ggplot2)
+library(reshape2)
+library(rcompanion)
+```
+
+```{r, echo=FALSE}
+
+# Aggregate the data by Hair and Eye color
+hair_eye <- apply(HairEyeColor, c("Hair", "Eye"), sum)
+
+# Convert the table to a data frame
+df <- as.data.frame(as.table(hair_eye))
+
+# Calculate the relative frequency (percentage) within each Hair color group
+df <- df %>%
+  group_by(Hair) %>%
+  mutate(RelativeFreq = Freq / sum(Freq)) %>%
+  ungroup()
+
+# Define custom colors that match typical eye colors
+eye_colors <- c("Brown" = "#634e34",   # Brown
+                "Blue"  = "#81badd",   # Blue
+                "Hazel" = "#9d6500",   # Hazel (golden brown)
+                "Green" = "#b5d29e")   # Green
+
+# Create the stacked bar plot with custom colors and percentage labels
+ggplot(df, aes(x = Hair, y = Freq, fill = Eye)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = scales::percent(RelativeFreq, accuracy = 0.1)), 
+            position = position_stack(vjust = 0.5), color = "white", size = 3.5) +
+  scale_fill_manual(values = eye_colors) +  # Use the custom eye colors
+  labs(
+    title = "Distribution of Hair and Eye Color",
+    y = "Count",
+    x = "Hair Color",
+    fill = "Eye Color"
+  ) +
+  theme_minimal(base_size = 15) +  # Clean minimal theme with larger base font size
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),  # Center and bold the title
+    axis.title = element_text(face = "bold"),  # Bold axis titles
+    legend.position = "right",  # Position legend on the right
+    panel.grid.major = element_line(color = "grey80"),  # Light grey grid lines
+    panel.grid.minor = element_blank()  # Remove minor grid lines
+  )
+
+```
+
+Looking at this data, we see quite a bit of change in the distribution of eye colors among the different hair groups. A notable stand out here is the uniquely large proportion of people with blond hair that also possess blue eyes relative to the other hair colors.
+
+This suspicion that the two groups aren't independent is backed up by our test's p-value which comes back well below the .05 threshold.
+
+```{r, results='hold'}
+
+# Aggregate the data by summing over Sex
+hair_eye <- apply(HairEyeColor, c("Hair", "Eye"), sum)
+
+# Perform the Chi-Squared Test for Independence between Hair Color and Eye Color
+hair_eye_chi_squared <- chisq.test(hair_eye)
+
+# Print the test results
+print(hair_eye_chi_squared)
+cramerV(hair_eye)
+```
+
+Along with this, we can view the effect size via Cramer's V. To understand how much of an effect this value suggests we can consult the following table provided by [this](https://real-statistics.com/chi-square-and-f-distributions/effect-size-chi-square/) informative website:
+
+![](images/clipboard-621160409.png){width="518"}
+
+Here, *df\** is given by the min(# columns, \# rows) - 1. In this instance we have 4 columns (Brown, Blue, Hazel, Green) and 4 rows (Black, Brown, Red, Blond). Thus, *df\** = 3. Using this we can see our effect size of .279 is just below large, showing a practically significant amount of dependence between hair and eye color.
+
+## *Hair Color & Sex*
+
+Next up we can test for independence between hair color and sex. To start we'll visualize the connection between the two groups with a similar bar graph.
+
+```{r,echo=FALSE, results='hold'}
+
+# Aggregate the data by Hair and Sex
+hair_sex <- apply(HairEyeColor, c("Hair", "Sex"), sum)
+
+# Convert the table to a data frame
+df_hair_sex <- as.data.frame(as.table(hair_sex))
+
+# Calculate the relative frequency (percentage) within each Hair color group
+df_hair_sex <- df_hair_sex %>%
+  group_by(Hair) %>%
+  mutate(RelativeFreq = Freq / sum(Freq)) %>%
+  ungroup()
+
+# Define custom colors for sex categories
+sex_colors <- c("Male" = "#1E90FF",  # Blue for Male
+                "Female" = "#FF69B4")  # Pink for Female
+
+# Create the stacked bar plot with custom colors and percentage labels only
+ggplot(df_hair_sex, aes(x = Hair, y = Freq, fill = Sex)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = scales::percent(RelativeFreq, accuracy = 0.1)), 
+            position = position_stack(vjust = 0.5), color = "white", size = 5) +
+  scale_fill_manual(values = sex_colors) +  # Use the custom colors for sex
+  labs(
+    title = "Distribution of Hair Color by Sex",
+    y = "Count",
+    x = "Hair Color",
+    fill = "Sex"
+  ) +
+  theme_minimal(base_size = 15) +  # Clean minimal theme with larger base font size
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),  # Center and bold the title
+    axis.title = element_text(face = "bold"),  # Bold axis titles
+    legend.position = "right",  # Position legend on the right
+    panel.grid.major = element_line(color = "grey80"),  # Light grey grid lines
+    panel.grid.minor = element_blank()  # Remove minor grid lines
+  )
+```
+
+We can see that the split in hair color between men and women seems pretty even, hovering around 50%. However, this pattern somewhat deviates in the blond category, with quite a bit more observed blonde women than blond men. We'll run a test for independence on these four groups.
+
+```{r, results = 'hold'}
+
+# Aggregate the data by summing over Eye Color
+hair_sex <- apply(HairEyeColor, c("Hair", "Sex"), sum)
+
+# Perform the Chi-Squared Test for Independence between Hair Color and Sex
+hair_sex_chi_squared <- chisq.test(hair_sex)
+
+# Print the test results
+print(hair_sex_chi_squared)
+cramerV(hair_sex)
+```
+
+The p-value comes back just barely below the .05 threshold, suggesting with statistical significance that hair color is dependent upon sex. However, using in this case *df\* = 1,* we see a small effect size, suggesting that though there seems to be some dependence, it's not a large relationship.
+
+Returning back to our graph, it seems that blond hair seems to be the deciding factor that deviates from the pattern of approximetly a 50/50 split in hair color between men and women. To account for this, we can re-run our test for independence only considering the other three hair colors: Black, Brown, and Red.
+
+```{r, results='hold'}
+
+# Aggregate the data by summing over Hair Color and Sex
+hair_sex <- apply(HairEyeColor, c("Hair", "Sex"), sum)
+
+# Exclude the "Blond" hair color
+hair_sex_no_blond <- hair_sex[rownames(hair_sex) != "Blond", ]
+
+# Perform the Chi-Squared Test for Independence between Hair Color and Sex
+hair_sex_chi_squared_no_blond <- chisq.test(hair_sex_no_blond)
+
+# Print the test results
+print(hair_sex_chi_squared_no_blond)
+```
+
+This test returns a high p-value, suggesting that sex and hair color *are* independent of each other for the other three hair colors. Perhaps it's just sample error, but maybe something interesting here is going on genetically with blonds.
+
+## Eye Color & Sex
+
+Finally, let's test for a connection between eye color and sex. We'll resort to the same approach we've been using for the previous tests starting with visualization.
+
+```{r, echo=FALSE}
+
+# Aggregate the data by Eye and Sex
+eye_sex <- apply(HairEyeColor, c("Eye", "Sex"), sum)
+
+# Convert the table to a data frame
+df_eye_sex <- as.data.frame(as.table(eye_sex))
+
+# Calculate the relative frequency (percentage) within each Eye color group
+df_eye_sex <- df_eye_sex %>%
+  group_by(Eye) %>%
+  mutate(RelativeFreq = Freq / sum(Freq)) %>%
+  ungroup()
+
+# Define custom colors for sex categories
+sex_colors <- c("Male" = "#1E90FF",  # Blue for Male
+                "Female" = "#FF69B4")  # Pink for Female
+
+# Create the stacked bar plot with custom colors and percentage labels only
+ggplot(df_eye_sex, aes(x = Eye, y = Freq, fill = Sex)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = scales::percent(RelativeFreq, accuracy = 0.1)), 
+            position = position_stack(vjust = 0.5), color = "white", size = 5) +
+  scale_fill_manual(values = sex_colors) +  # Use the custom colors for sex
+  labs(
+    title = "Distribution of Eye Color by Sex",
+    y = "Count",
+    x = "Eye Color",
+    fill = "Sex"
+  ) +
+  theme_minimal(base_size = 15) +  # Clean minimal theme with larger base font size
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),  # Center and bold the title
+    axis.title = element_text(face = "bold"),  # Bold axis titles
+    legend.position = "right",  # Position legend on the right
+    panel.grid.major = element_line(color = "grey80"),  # Light grey grid lines
+    panel.grid.minor = element_blank()  # Remove minor grid lines
+  )
+```
+
+Things seem pretty even here, with a similar male-to-female ratio across eye colors. We'll run another Chi-Squared test to see if we see enough uniformity to suggests independence.
+
+```{r, results='hold'}
+
+# Aggregate the data by Eye and Sex
+eye_sex <- apply(HairEyeColor, c("Eye", "Sex"), sum)
+
+# Perform the Chi-Squared Test for Independence between Hair Color and Sex
+eye_sex_chi_squared <- chisq.test(eye_sex)
+
+# Print the test results
+print(eye_sex_chi_squared)
+cramerV(eye_sex)
+```
+
+Our p-value aligns with our suspicions, eye color seems to be independent of sex. Our negligible effect size backs this up, re-enforcing this idea that even if there is a relationship between eye color and sex, it's a very small one. There's no evidence here to suggest that eye color is heavily determined by sex.

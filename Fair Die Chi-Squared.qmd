@@ -1,0 +1,92 @@
+---
+title: "Fair Die Chi-Squared"
+format: html
+editor: visual
+---
+
+It’s a lazy Saturday evening, and you’re hanging out at your friend’s house for a game night. The group has gathered around the coffee table, laughing and chatting as you play a game that’s been a favorite for years. The game involves rolling a six-sided die, and the stakes are simple: higher rolls (4, 5, or 6) favor you, while lower rolls (1, 2, or 3) favor your friend who owns the die.
+
+As the night goes on, you notice something strange. Despite the randomness of rolling a die, your friend seems to keep winning round after round. You’re rolling low numbers more often than not, and it’s costing you the game. At first, you brush it off as bad luck, but after an hour of consistent losses, you start to get suspicious. Could the die be rigged?
+
+As the night winds down, your friends start heading home, satisfied with the evening’s fun. But you can’t shake the feeling that something’s off. You make an excuse to stay a little longer—maybe to help clean up, or to chat a bit more. Once your friends are gone and the conversation lulls, you see your opportunity.
+
+You ask your friend to leave you alone for a few minutes so you can finish up something. Once you’re alone, you grab the die and head to the table. Determined to figure out whether the die is fair, you roll it 100 times, carefully noting each result. If your friend’s die is truly random, the numbers should be about evenly distributed. Here's the results of your die-rolling experiment:
+
+```{r, echo =FALSE}
+
+# Load necessary libraries
+library(ggplot2)
+
+# Step 1: Define the probabilities for each side of the die
+true_probabilities <- c(0.19, 0.19, 0.19, 0.19, 0.19, 0.05)
+
+# Normalize the probabilities to ensure they sum to 1
+true_probabilities <- true_probabilities / sum(true_probabilities)
+
+set.seed(5)
+# Step 2: Simulate a large number of rolls
+n_rolls <- 100  # Number of rolls
+
+# Simulate the rolls
+rolls <- sample(1:6, size = n_rolls, replace = TRUE, prob = true_probabilities)
+
+# Calculate observed frequencies for each side
+observed_counts <- table(rolls)
+
+# Convert observed counts to a data frame for plotting
+observed_df <- as.data.frame(observed_counts)
+colnames(observed_df) <- c("Side", "Count")
+
+# Create a prettier bar plot of the observed counts
+ggplot(observed_df, aes(x = as.factor(Side), y = Count)) +
+  geom_bar(stat = "identity", fill = "#F5F5DC", color = "black", width = 0.7) +
+  geom_text(aes(label = Count), vjust = -0.3, color = "white", size = 4) +  # Add count labels on top of the bars
+  labs(title = "Distribution of Die Rolls",
+       subtitle = "After 100 rolls at your friend's house",
+       x = "Die Side",
+       y = "Number of Rolls") +
+  theme_minimal(base_size = 14) +  # Use a minimal theme with larger base font size
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 16),  # Center and bold the title
+    plot.subtitle = element_text(hjust = 0.5, size = 12),  # Center the subtitle
+    axis.title.x = element_text(face = "bold"),  # Bold x-axis title
+    axis.title.y = element_text(face = "bold"),  # Bold y-axis title
+    axis.text = element_text(size = 12)  # Increase axis text size
+  ) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05)))  # Ensure space above bars for labels
+```
+
+This evidence certainly seems to agree with you that higher numbers are less likely to be rolled than lower ones. But are these deviations strong enough to show decisively that the die is unfair, or could it just be a matter of random chance? You certainly wouldn't want to accuse your friend of being a cheat if there was a decent likelihood that the dice was never rigged in the first place, and you just got unlucky.
+
+To assess the odds that this die truly is loaded, we'll want to use a Chi-squared Goodness of Fit test. This will tell us if the deviations this dice has from our expectations are significant or not. To do this, we'll first set up our expectations, assuming the die *is* fair. In this case, each roll has an equal probability of $\frac{1}{6}$. Therefore, with our 100 rolls, we would expect to see each number come up $\left(\frac{1}{6}\right) \times 100$ or 16.67 times. We don't need to worry that we can't actually roll a number 16.67 times, this is just our expected value for each group. We can store this in R using the following code:
+
+```{r}
+
+#This creates a vector of values which is just 1/6 repeated 6 times. 
+expected_probabilities <- rep(1/6, 6)
+#This is the expected number of rolls for each face of the die. 
+expected_counts <- expected_probabilities * n_rolls
+```
+
+Here, `n_rolls` is a variable, that in our instance is set to 100.
+
+Now that we have our data ready, we can run our Chi-Squared Goodness of Fit test. Remember, for a Goodness of Fit test, the null hypothesis is:
+
+$H_0$: The true probability distribution of die rolls is the expected probability distribution (i.e. the die is fair).
+
+$H_a$: The true probability distribution of die rolls is *NOT* the expected probability distribution (i.e. the die is not fair).
+
+We run the test and find the following result:
+
+```{r}
+chi_squared_test <- chisq.test(observed_counts, p = expected_probabilities)
+
+# Print the test results
+print(chi_squared_test)
+```
+
+Our p-value indicates that only 4.07% of the time we would receive results at least as extreme as the one we've observed assuming the die is fair. Following the 5% alpha level we tend to use, we'll reject our null hypothesis.
+
+You confront your friend, revealing that after rolling the die 100 times and running a Chi-Squared test, you’re confident the die is rigged. Your friend laughs and admits it, explaining that the die is weighted against rolling a 6, giving it only a 5% chance of showing up. Then, with a sly grin, he offers you a deal: keep quiet about the trick, and he’ll let you in on the secret, allowing you to use the die’s advantage in future games.
+
+Now, the choice is yours—do you accept the offer and gain a subtle edge in the next game night, or do you spill the beans to your friends, keeping the game fair for everyone?

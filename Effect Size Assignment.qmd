@@ -1,0 +1,164 @@
+---
+title: "Playlist Effect Size Assignment"
+format: html
+editor: visual
+---
+
+In this assignment, you'll compare the difference in song lengths between my and your playlist.
+
+```{r, echo=FALSE, results='hide'}
+
+#We always start with calling our libraries
+library(effsize)
+library(ggplot2)
+suppressPackageStartupMessages(library(dplyr))
+
+# Set the file path (adjust this path according to your system)
+lukes_path <- "~/Downloads/lukes_playlist.csv"
+my_path <- "~/Downloads/serennas_playlist.csv"
+
+# Read the CSV files, rename columns, and add new columns for minutes and seconds
+lukes_playlist <- read.csv(lukes_path) %>%
+  mutate(Minutes = Duration..ms. / 60000)
+
+lukes_playlist <- na.omit(lukes_playlist)
+
+my_playlist <- read.csv(my_path) %>%
+  mutate(Minutes = Duration..ms. / 60000)
+
+my_playlist <- na.omit(my_playlist)
+
+```
+
+To begin, take a look at the distribution of song lengths in our playlists.
+
+Notice here that the y-axis is "Density" and not "Frequency". This is to show us the shape of both distributions without worry about the size of each playlist. If my playlist were significantly longer or shorter than yours, then it would be difficult to get a sense for the underlying distributions. Density takes the number of songs in each playlist out of the equation, telling us where song lengths tend to concentrate.
+
+```{r, echo=FALSE}
+ggplot() +
+  # Histogram for Luke's playlist
+  geom_histogram(data = lukes_playlist, aes(x = Minutes, y = after_stat(density)), 
+                 bins = 100, fill = "red", alpha = 0.5, 
+                 color = "black", linewidth = .2) +
+  # Histogram for your playlist
+  geom_histogram(data = my_playlist, aes(x = Minutes, y = after_stat(density)), 
+                 bins = 100, fill = "blue", alpha = 0.5, 
+                 color = "black", linewidth = .2) +
+  # Titles and labels
+  labs(title = "Comparison of Song Lengths \nin Playlists",
+       subtitle = "Red: Luke's Playlist, Blue: My Playlist",
+       x = "Song Length (Minutes)",
+       y = "Density") +
+  # Theme adjustments for a cleaner look
+  theme_bw(base_size = 15) +
+  # Customizing the axes
+  theme(axis.title = element_text(face = "bold"),
+        plot.title = element_text(face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5),
+        legend.position = "none")
+```
+
+What does the following histogram tell you about the length of songs you and I listen to?
+
+1.  
+
+Do the histograms seem to resemble a particular distribution?
+
+2.  
+
+Do the histograms appear to be skewed, and if so in which way?
+
+3.  
+
+What is a strength of visualizing our data in the manner? What is a potential weakness?
+
+4.  
+
+Now that you've taken a look at the data using a histogram, let's visualize the data using boxplots.
+
+```{r, echo=FALSE}
+# Combine the data into one data frame with an additional column indicating the playlist
+combined_data <- rbind(
+  data.frame(Minutes = lukes_playlist$Minutes, Playlist = "Luke's Playlist"),
+  data.frame(Minutes = my_playlist$Minutes, Playlist = "My Playlist")
+)
+
+# Function to identify outliers
+is_outlier <- function(x) {
+  return(x < quantile(x, 0.25) - 1.5 * IQR(x) | x > quantile(x, 0.75) + 1.5 * IQR(x))
+}
+
+# Add a column indicating whether each point is an outlier
+combined_data$outlier <- ave(combined_data$Minutes, combined_data$Playlist, FUN = is_outlier)
+
+# Plot with combined color and fill scales
+ggplot(combined_data, aes(x = Playlist, y = Minutes, fill = Playlist, color = Playlist)) +
+  # Boxplot without outliers
+  geom_boxplot(alpha = 0.5, color = "black", linewidth = 0.2, outlier.shape = NA) +
+  # Jittered outliers only
+  geom_jitter(data = subset(combined_data, outlier == TRUE), 
+              width = 0.2, shape = 1, size = 2) +
+  # Titles and labels
+  labs(title = "Boxplot with Jittered Outliers of Song \nLengths in Playlists",
+       subtitle = "Red: Luke's Playlist, Blue: My Playlist",
+       x = "Playlist",
+       y = "Song Length (Minutes)") +
+  # Theme adjustments for a cleaner look
+  theme_bw(base_size = 15) +
+  # Customizing the axes
+  theme(axis.title = element_text(face = "bold"),
+        plot.title = element_text(face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5),
+        legend.position = "none") +
+  # Combined color and fill scales
+  scale_color_manual(values = c("Luke's Playlist" = "red", "My Playlist" = "blue")) +
+  scale_fill_manual(values = c("Luke's Playlist" = "red", "My Playlist" = "blue"))
+```
+
+Looking at the boxplots, who seems to have a higher median song length? Is it easy to discern or are the lines too close to distinguish?
+
+1.  
+
+What do the outliers in the boxplot tell us about our data?
+
+2.  
+
+Continue on with a two-sided t-test:
+
+```{r, echo=FALSE}
+# Perform a two-sample t-test
+t.test(my_playlist$Minutes, lukes_playlist$Minutes, 
+                        alternative = "two.sided")
+```
+
+What does this test seek to tell us?
+
+1.  
+
+What is the population of interest in this instance?
+
+2.  
+
+Using a 95% confidence level, will we reject or fail to reject the null hypothesis? Why?
+
+3.  
+
+p-Values don't tell us the whole story. Now compare the effect size of our data:
+
+```{r, echo=FALSE}
+
+#Calculate the effect size through Cohen's d 
+cohen.d(my_playlist$Minutes, lukes_playlist$Minutes)
+```
+
+What is the effect size (Cohen's d)?
+
+1.  
+
+What does the scale of our effect size (negligible, small, medium, large) tell us about the practical significance of our data?
+
+2.  
+
+Does the p-Value produced seem to be primarily due to the difference between the two playlist's data, or the sample size?
+
+3.  

@@ -1,0 +1,140 @@
+---
+title: "NHANES Effect Size"
+format: html
+editor: visual
+---
+
+Hey!
+
+```{r,echo=FALSE}
+
+# Load necessary libraries
+library(NHANES)
+suppressPackageStartupMessages(library(dplyr))
+library(effsize)
+library(ggplot2)
+library(ggpubr)
+```
+
+Today, we'll explore whether there is a statistically significant difference in the daily number of alcoholic beverages consumed by married and divorced individuals. To do this, we'll analyze data from the National Health and Nutrition Examination Survey (NHANES), conducted by the U.S. National Center for Health Statistics.
+
+The NHANES dataset provides a rich source of health-related data, with over 10,000 entries capturing a wide array of health information for each individual. This dataset allows us to investigate numerous relationships, including the one we'll focus on today.
+
+We'll begin by visualizing the average number of daily alcoholic drinks for both married and divorced individuals. This will help us gain an initial understanding of the data before we delve into statistical testing and effect size analysis.
+
+```{r,echo=FALSE}
+
+# Filter dataset for two age groups: 20-29 and 30-39 years
+married <- NHANES %>% filter(MaritalStatus == "Married") %>% select(AlcoholDay)
+divorced <- NHANES %>% filter(MaritalStatus == "Divorced") %>% select(AlcoholDay)
+
+# Remove missing values
+married <- na.omit(married)
+divorced <- na.omit(divorced)
+
+# Plot histogram for Married group
+histogram_married <- ggplot(married, aes(x = AlcoholDay, y = after_stat(density))) +
+  geom_histogram(fill = "#00A676", binwidth = 1, alpha = 0.7, 
+                 color = "black", linewidth = .2) +
+  labs(
+    title = "Married",
+    x = "Drinks per Day",
+    y = "Density"
+  ) +
+  theme_minimal(base_size = 15) +
+  theme(
+    plot.title = element_text(face = "bold", size = 18),
+    axis.title.x = element_text(margin = margin(t = 10)),
+    axis.title.y = element_text(margin = margin(r = 10))
+  )
+
+
+# Plot histogram for Divorced group
+histogram_divorced <- ggplot(divorced, aes(x = AlcoholDay, y = after_stat(density))) +
+  geom_histogram(fill = "#D1495B", binwidth = 1, alpha = 0.7,
+                 color = "black", linewidth = .2) +
+  labs(
+    title = "Divorced",
+    x = "Drinks per Day",
+    y = "Density"
+  ) +
+  theme_minimal(base_size = 15) +
+  scale_x_continuous(breaks = seq(0,30,5))+
+  theme(
+    plot.title = element_text(face = "bold", size = 18),
+    axis.title.x = element_text(margin = margin(t = 10)),
+    axis.title.y = element_text(margin = margin(r = 10))
+  )
+
+# Combine the two histograms using ggarrange
+combined_histograms <- ggarrange(histogram_married, histogram_divorced, ncol = 2, nrow = 1)
+# Print the combined histograms
+print(combined_histograms)
+```
+
+From our initial visualizations, we notice that while there is a slight difference in the average number of daily alcoholic drinks between married and divorced individuals, the overall distribution shapes are quite similar. The plots don't show a dramatic difference between the two groups.
+
+To further explore these distributions and make comparisons more visually intuitive, we can use box plots. Box plots will allow us to compare the spread, central tendency, and presence of any outliers between the two groups in a more direct and meaningful way.
+
+```{r,echo=FALSE}
+# Add a group label for plotting
+married$Group <- "Married"
+divorced$Group <- "Divorced"
+
+# Combine the two groups into one dataframe
+combined_data <- rbind(married, divorced)
+
+
+# Plot boxplot
+boxplot_plot <- ggplot(combined_data, aes(x = Group, y = AlcoholDay, fill = Group)) +
+  geom_boxplot(alpha = 0.7) +
+  labs(
+    title = "Boxplot of Alcohol Consumption by Marital Status",
+    x = "Marital Status",
+    y = "Alcohol Consumption (Drinks per Day)"
+  ) +
+  scale_fill_manual(values = c("Married" = "#00A676", "Divorced" = "#D1495B")) +
+  theme_minimal(base_size = 15) +
+  theme(
+    plot.title = element_text(face = "bold", size = 18),
+    axis.title.x = element_text(margin = margin(t = 10)),
+    axis.title.y = element_text(margin = margin(r = 10)),
+    legend.position = "none"
+  )
+
+# Print boxplot
+print(boxplot_plot)
+```
+
+Once again, the box plots suggest that there isn’t a substantial difference between the two groups in terms of the daily number of alcoholic beverages consumed. The central tendencies and spreads for both married and divorced individuals appear quite similar.
+
+To delve deeper into this comparison, we'll conduct a two-sample t-test. Specifically, we’ll perform a one-sided test to determine if there’s statistical evidence to support the claim that married individuals consume fewer alcoholic drinks per day on average than divorced individuals.
+
+```{r}
+
+# Perform a t-test to check for statistical significance
+t_test_result <- t.test(married$AlcoholDay, divorced$AlcoholDay,"less")
+print(t_test_result)
+```
+
+The results of our two-sample t-test are indeed statistically significant, with a p-value that suggests strong evidence that married individuals consume fewer alcoholic beverages per day, on average, than divorced individuals.
+
+However, when we examine the actual sample means, we find that married individuals average about 2.4 drinks per day, while divorced individuals average 2.75 drinks per day. The difference is just 0.35 drinks per day, indicating that while there is a statistically significant difference, it's not a large one. Divorced individuals are not consuming vastly more drinks than married individuals on average.
+
+This is where the concept of practical significance comes into play. The statistical significance of our results may be driven more by the large sample size rather than a meaningful difference in daily alcohol consumption between the two groups.
+
+To better understand the magnitude of this difference, we can calculate Cohen's d, a measure of effect size. This will help us assess the practical significance of our findings, giving us a clearer picture of how substantial the difference is in a real-world context.
+
+```{r}
+# Calculate Cohen's d to measure effect size
+cohen_d_result <- cohen.d(married$AlcoholDay, divorced$AlcoholDay)
+print(cohen_d_result)
+```
+
+The calculation of Cohen's d returns a value of -0.1585, which is considered a negligible effect size. This indicates that, although our t-test showed statistical significance, the actual difference between the two groups is minimal in practical terms. Essentially, while divorced individuals may drink slightly more than married individuals on average, the difference is not substantial—it's certainly not as if divorced individuals are consuming an extra five drinks per day.
+
+This highlights the importance of considering effect size before drawing conclusions from statistically significant results. Headlines such as "Study shows divorced individuals tend to out-drink married ones with statistical significance" may grab attention, but they can be misleading if not tempered with an understanding of the effect size.
+
+With a large enough sample size, any difference can become statistically significant, but that doesn't necessarily mean the difference is meaningful in real-world terms. In our case, the difference of 0.35 drinks per day may not be particularly alarming, and it’s important to convey that the practical implications of this finding are limited.
+
+Before reporting results, especially those that could influence public perception or policy, we must check the effect size to ensure that we are not overstating the importance of statistically significant findings. In this case, the negligible effect size suggests that the difference in daily alcohol consumption between married and divorced individuals, while statistically detectable, may not be large enough to warrant significant concern.

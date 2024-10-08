@@ -1,0 +1,157 @@
+---
+title: "One-sample t-Test"
+format: html
+editor: visual
+---
+
+Hello!
+
+```{r, echo=FALSE}
+# Load Necessary Libraries
+library(ggplot2)
+suppressPackageStartupMessages(library(dplyr))
+library(nortest)
+library(ggpubr)
+```
+
+We are going to run a t-Test in R, using the dataset "Ozone" to measure air quality in New York using data collected in 1973. To begin, it makes sense to take a look at the start of our data set to see how it is organized. Most of the programming in R will be taken care of behind the scenes, but to begin it's always useful to get a sense for the setup of our data. For the purpose of this test we'll be focusing on the "Ozone" values. These data points are recorded in ppb (parts per billion). However, we could perform a one-sample t-test on any continuous variable such as Solar.R, Wind, or Temp.
+
+```{r}
+
+# View the first few rows of the dataset
+head(airquality)
+```
+
+Continuing on, let's take a look at some statistics underlying the ozone data.
+
+```{r, results='hold', echo=FALSE}
+
+ozone_data <- na.omit(airquality$Ozone)
+df <- length(ozone_data)-1
+
+calculate_stats <- function(data) {
+  data <- na.omit(data) # Remove NA values
+  mean_val <- mean(data)
+  sd_val <- sd(data)
+  size_val <- length(data)
+  
+  cat("Sample Mean:", round(mean_val, 2), "\n")
+  cat("Standard Deviation:", round(sd_val, 2), "\n")
+  cat("Sample Size:", size_val, "\n")
+}
+
+calculate_stats(ozone_data)
+```
+
+This may be useful, but it's hard to interpret without context. The following image gives us a sense for the meaning behind our values. We see that our sample's mean of 42.13 puts us in the "good" zone. However, with a large standard deviation, this sample mean may be more optimistic (by random chance) than the population mean that we actaully care about.
+
+![](images/clipboard-3273838880.png)
+
+*This information was found from the following [website](https://www.nps.gov/subjects/air/humanhealth-ozone.htm#:~:text=Unhealthy%20(86%E2%80%93105%20ppb),prolonged%20or%20heavy%20exertion%20outdoors.).*
+
+From here, we should make sure our data meets the assumptions required for a t-test. Since we don't know the manner in which the data is collected, we'll assume our data was collected meeting the requirements of random sampling and independence.
+
+Finally, we should make sure we have a large enough sample size to ensure that the distribution of sample means is approximetly normal. With a sample size of 116, this assumption tends not to be much cause for concern, but we can take a quick look at how our data performs in a QQ-plot and using a test for normality. However, for most population distributions, the central limit theorem kicks in at around a sample size of 30 (At least according to statistical consensus), so we should be well within the clear. That being said, for the sake of caution and curiosity, let's take a look.
+
+```{r, results='hold', fig.show='hold', echo=FALSE}
+
+# Function to perform normality test and create QQ plot
+perform_normality_test <- function(data) {
+  sample_data <- na.omit(data %>% pull(Ozone))
+  sample_size <- length(sample_data)
+  
+  if(sample_size < 50) {
+    test_result <- shapiro.test(sample_data)
+  } else {
+    test_result <- ad.test(sample_data)
+  }
+  
+  p2 <- ggplot(data.frame(sample_data), aes(sample = sample_data)) + 
+    stat_qq() +
+    stat_qq_line() +
+    labs(title = paste("QQ Plot for Ozone"), x = "Theoretical Quantiles", y = "Sample Quantiles") +
+    theme_bw()
+  
+  list(plot = p2, test_result = test_result)
+}
+
+# Perform tests and generate QQ plots for each group
+results_ozone <- perform_normality_test(airquality)
+
+# Extract p-values
+p_values <- data.frame(
+  `p-Value` = results_ozone$test_result$p.value)
+
+# Create a table plot for p-values with the specified title
+p_table <- ggtexttable(p_values, rows = NULL, theme = ttheme("mOrange"))
+p_table <- p_table %>% tab_add_title(text = "Test for Normality", face = "bold", size = 12)
+
+# Arrange all plots and the table in one visual
+combined_plot <- ggarrange(
+  results_ozone$plot, p_table)
+
+# Display the combined plot
+print(combined_plot)
+```
+
+Given the small p-value from our normality test (we’ll explain that notation later), it seems highly improbable that our population is normally distributed. However, this isn’t a major issue. With a large sample size, the Central Limit Theorem ensures that we can proceed confidently, as it helps mitigate the impact of non-normality. That said, if our sample were much smaller, say around 12 data points, we would need to reconsider whether this test is appropriate.
+
+Now, let’s move on to conducting our test.
+
+We’ll test if the true mean ozone level is less than 55, which marks the transition point between good and moderate air quality.
+
+To get a better understanding, let’s start by visualizing the data with a histogram.
+
+```{r, results='hold', fig.show='hold', echo=FALSE, warning=FALSE}
+
+
+ggplot(data = airquality, aes(x = Ozone)) +
+  geom_histogram(binwidth = 10, fill = "#748F67", color = "black", na.rm = TRUE) +
+  
+  # Add vertical lines for the means
+  geom_vline(aes(xintercept = 42.13), color = "#F7B076", 
+             linetype = "solid", linewidth = 1.2) +  # Solid for observed mean
+  geom_vline(aes(xintercept = 55), color = "#DC5318", 
+             linetype = "dashed", linewidth = 1.2) +  # Dashed for hypothesized mean
+  
+  # Update the labels
+  labs(title = "Ozone Level Distribution",
+       subtitle = "Comparison of Observed and Hypothesized Means",
+       x = "Observed Ozone Level",
+       y = "Frequency") +
+  
+  # Apply a clean theme
+  theme_minimal() +
+  
+  # Add annotations with hardcoded values and mathematical symbols
+  annotate("text", x = 100, y = 20, 
+           label = expression(paste("Observed Mean (", bar(x), "): 42.13")), 
+           color = "#F7B076") +
+  annotate("text", x = 100, y = 22, 
+           label = expression(paste("Hypothesized Mean (", mu[0], "): 55")), 
+           color = "#DC5318")
+```
+
+The result of our t-test may not be immediately obvious from this histogram. There’s only one way to confirm it: by running the test itself.
+
+For this test, we first need to establish the null and alternative hypotheses, which will guide us in interpreting the p-value:
+
+-   Null Hypothesis (H₀): µ ≥ 55 (µ₀)
+
+-   Alternative Hypothesis (Hₐ): µ \< 55 (µ₀)
+
+With our hypotheses defined, all that’s left is to run a single line of code in R and interpret the output accordingly.
+
+```{r, results='hold'}
+
+#For a left-tailed test, let alternative = "less", for a right tailed-test: "greater" 
+t.test(ozone_data, mu = 55, alternative = "less")
+```
+
+Take a look at the p-value. In R, "2.623e-05" is a way of denoting scientific notationm which represents $2.623 \times 10^{-5}$. This is significantly smaller than our standard alpha value of 0.05, which we use as a threshold for rejection.
+
+As a useful rule of thumb: if the p-value has "e" in it, we're going to reject the null hypothesis. This "e" is not representing Euler's number ≈ 2.718, but stands for "exponent".
+
+Since our p-value is indeed less than .05, we reject the null hypothesis, concluding with confidence that the true mean ozone level is less than 55. Therefore, it appears that in 1973, the air quality in New York was relatively good.
+
+Congratulations on completing your first hypothesis test in R! As you’ve seen, the amount of coding required for this test was minimal, involving just one line of code. Hypothesis testing will be a recurring theme throughout this course, so make sure you’re comfortable with the process we’ve just covered.
