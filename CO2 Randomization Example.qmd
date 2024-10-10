@@ -1,0 +1,213 @@
+---
+title: "CO2 Randomization Example"
+format: html
+editor: visual
+---
+
+Hello!
+
+```{r, echo=FALSE}
+
+library(ggplot2)
+suppressPackageStartupMessages(library(dplyr))
+library(ggpubr)
+```
+
+Today, we're going to be using randomization to examine the CO₂ uptake of grass from Quebec, using two treatment types: chilled and unchilled. We can take a quick look at what our data set looks like, to get a sense with what we're working with. In this case we'll focus on the `uptake` variable between both `Treatment` groups: `chilled` and `unchilled`.
+
+```{r, echo = FALSE}
+
+# Filter the dataset to include only the two treatment groups for comparison
+Quebec_CO2 <- CO2 %>% filter(Treatment %in% c("nonchilled", "chilled"),Type == "Quebec")
+
+# Display the first few rows of the filtered dataset
+head(Quebec_CO2)
+```
+
+As usual, before we jump to some sort of hypothesis test, it's wise to get a visual of how the treatment type effects uptake values using a boxplot.
+
+```{r, echo = FALSE}
+
+ggplot(Quebec_CO2, aes(x = Treatment, y = uptake, fill = Treatment)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(
+    title = "CO2 Uptake by Treatment",
+    x = "Treatment Type",
+    y = "CO2 Uptake"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(color = "black"),
+    legend.position = "none"
+  ) +
+  scale_fill_brewer(palette = "Pastel1")
+
+```
+
+There appears to be a noticeable difference in CO₂ uptake between the two groups, but with only 21 data points per group, this difference could be due to random variation.
+
+As with other hypothesis tests we’ve encountered, our goal is to assess whether there is a significant difference in the population means of CO₂ uptake between the chilled and unchilled grass. In the past, we might have used Welch’s two-sample t-test for this comparison.
+
+However, since Welch’s t-test is parametric, it assumes the distribution of sample means for samples of equal size to our own are approximately normal. With larger sample sizes (typically n ≥ 30 ), this assumption holds due to the Central Limit Theorem. But with smaller samples, we can only assume normality if the population itself is approximately normal. To check this, we’ll run a Shapiro-Wilk test for normality and visualize the data using QQ-plots
+
+```{r, echo = FALSE}
+# Function to perform normality test and create QQ plot
+perform_normality_test <- function(data, group_name, variable) {
+  sample_data <- na.omit(data %>% filter(Treatment == group_name) %>% pull(variable))
+  sample_size <- length(sample_data)
+  
+  if(sample_size < 50) {
+    test_result <- shapiro.test(sample_data)
+  } else {
+    test_result <- ad.test(sample_data)
+  }
+  
+  p2 <- ggplot(data.frame(sample_data), aes(sample = sample_data)) + 
+    stat_qq() +
+    stat_qq_line() +
+    labs(title = paste("QQ Plot for", group_name), x = "Theoretical Quantiles", y = "Sample Quantiles") +
+    theme_bw()
+  
+  list(plot = p2, test_result = test_result)
+}
+
+# Perform tests and generate QQ plots for each group
+results_nonchilled <- perform_normality_test(Quebec_CO2, "nonchilled","uptake")
+results_chilled <- perform_normality_test(Quebec_CO2, "chilled","uptake")
+
+# Extract p-values
+p_values <- data.frame(
+  Group = c("nonchilled", "chilled"),
+  `p-Value` = c(results_nonchilled$test_result$p.value, results_chilled$test_result$p.value)
+)
+
+# Create a table plot for p-values with the specified title
+p_table <- ggtexttable(p_values, rows = NULL, theme = ttheme("mOrange"))
+p_table <- p_table %>% tab_add_title(text = "Test for Normality", face = "bold", size = 12)
+
+# Arrange all plots and the table in one visual
+combined_plot <- ggarrange(
+  results_nonchilled$plot, results_chilled$plot,p_table, 
+  ncol = 2, nrow = 2
+)
+
+# Display the combined plot
+print(combined_plot)
+
+```
+
+With p-values below 0.05 for both groups, we reject the null hypothesis that the samples come from normally distributed populations. This suggests it may be unwise to proceed with a parametric test like Welch’s t-test. While it’s not always clear if skewness will significantly impact the test results, it’s safer to use a non-parametric approach to avoid increasing the risk of Type I or Type II errors.
+
+This is where a Randomization (a.k.a Permutation) test comes to the rescue. Non-parametric tests like Randomization don't make any assumptions about the distribution of sample means. They instead tend to rely instead on simulations to get the results we're looking for.
+
+Randomization works by first calculating the observed difference in means between our two groups (chilled and unchilled). It then shuffles the group labels, assigning each data point randomly to either the chilled or unchilled group, regardless of its original assignment. The difference in means between these new randomly assigned groups is computed and stored. This process is repeated many times (usually around 10,000 iterations), generating a distribution of differences of group means. From here, our p-value is calculated as the proportion of iterations that resulted in a difference at least as extreme as the one we observed. To reiterate step-by-step, our Randomization test will be performed as follows:
+
+1.  **Calculate the observed difference in means** between the “chilled” and “unchilled” groups.
+2.  **Shuffle the group labels** (“chilled” or “unchilled”) randomly across all data points, assigning each “uptake” value to either group at random.
+3.  **Compute the difference in means** for this randomized group and store the result.
+4.  **Repeat steps 2 and 3** many times (e.g., 10,000 iterations), creating a distribution of differences along with the observed difference.
+5.  **Calculate the p-value** as the proportion of randomizations that resulted in a difference in means at least as extreme as the observed difference.
+
+We will interpret the p-value in the usual way: if the p-value is greater than 0.05, we fail to reject the null hypothesis, meaning there isn’t enough evidence to suggest a significant difference between the group means. If the p-value is less than 0.05, we reject the null hypothesis, indicating sufficient evidence of a significant difference between the population means.
+
+In this instance, our observed difference in CO₂ uptake between the chilled and unchilled group was:
+
+```{r, echo = FALSE}
+# Calculate the observed difference in mean CO2 uptake between the two treatments
+observed_diff <- Quebec_CO2 %>%
+  group_by(Treatment) %>%
+  summarise(mean_uptake = mean(uptake)) %>%
+  summarise(diff = diff(mean_uptake)) %>%
+  pull(diff)
+
+cat(observed_diff, "µmol/m² sec")
+
+
+```
+
+^\*\*Don't\ ask\ me\ what\ those\ units\ mean,\ I'm\ a\ statistician\ not\ a\ biologist!\*\*^
+
+Now, we'll go ahead and run our randomization simulation, and graph the distribution of differences in means between all the simulated groups. Any bars in red represent values that had a difference in group means at least as great as the one we observed (± 3.580952).
+
+```{r, echo = FALSE}
+# Updated function with all requested changes
+generate_permutation_plot <- function(data, n_permutations = 10000, binwidth = 0.5, p_size = 5, grid = FALSE, plot_number = NULL) {
+  all_uptake <- data$uptake
+  n <- length(all_uptake)
+  n_nonchilled <- sum(data$Treatment == "nonchilled")
+  permuted_diffs <- numeric(n_permutations)
+  
+  observed_diff <- mean(data$uptake[data$Treatment == "chilled"]) - 
+                   mean(data$uptake[data$Treatment == "nonchilled"])
+  
+  for (i in 1:n_permutations) {
+    permuted <- sample(all_uptake)
+    permuted_nonchilled <- permuted[1:n_nonchilled]
+    permuted_chilled <- permuted[(n_nonchilled + 1):n]
+    permuted_diffs[i] <- mean(permuted_chilled) - mean(permuted_nonchilled)
+  }
+  
+  p_value <- mean(abs(permuted_diffs) >= abs(observed_diff))
+  
+  # Main plot with different settings based on the 'grid' parameter
+  plot <- ggplot(data.frame(permuted_diffs), aes(x = permuted_diffs)) +
+    geom_histogram(binwidth = binwidth, color = "white", aes(fill = abs(observed_diff) <= abs(permuted_diffs))) +
+    scale_fill_manual(values = c("TRUE" = "#FF9999", "FALSE" = "#99CCFF")) + 
+    labs(
+      title = ifelse(grid, paste("Permutation Test", plot_number), "Distribution of Differences in Mean CO2 Uptake"),
+      subtitle = ifelse(grid, "", paste("Observed Difference:", round(observed_diff, 4))),
+      x = "Difference in Mean CO2 Uptake",
+      y = "Frequency"
+    ) +
+    theme_minimal(base_size = ifelse(grid, 12, 14), base_family = "Helvetica") +
+    theme(
+      plot.title = element_text(face = "bold", hjust = 0.5, size = ifelse(grid, 12, 14)),
+      plot.subtitle = element_text(hjust = 0.5),  # Centered subtitle
+      axis.title.x = element_text(margin = margin(t = 10)),
+      axis.title.y = element_text(margin = margin(r = 10)),
+      legend.position = "none",
+      panel.grid.major = element_line(color = "gray90")
+    ) +
+    annotate("text", x = Inf, y = Inf, label = paste("p-Value =", round(p_value, 4)), 
+             hjust = 1.1, vjust = 2, size = p_size, color = "red", fontface = "bold")
+  
+  return(plot)
+}
+
+# Generate single plot with full title and subtitle
+plot1 <- generate_permutation_plot(Quebec_CO2, p_size = 5, plot_number = NULL)
+plot1
+
+```
+
+In our simulations, we found that 23.59% of the randomizations produced a greater difference in group means than what we observed. This gives us a p-value of 0.2423, meaning that if the null hypothesis were true (i.e., there is no real difference between the chilled and unchilled groups), we would expect to see a difference as large as ours roughly 24% of the time.
+
+Because this p-value is relatively high, we don’t have enough evidence to claim that the observed difference is due to a real effect between the groups. In other words, the difference could very easily be explained by random variation alone. As a result, we fail to reject the null hypothesis and conclude that there is no significant difference in mean CO₂ uptake between the chilled and unchilled treatments.
+
+What’s elegant about this approach is how straightforward it is. We didn’t need to rely on complex calculus or theoretical assumptions like the Central Limit Theorem. Instead, we used the power of simulation: by shuffling the group labels and observing how often random assignments produced a difference as extreme as ours, we gained insight into whether our observed difference could be explained purely by chance. This intuitive process allows us to draw meaningful conclusions without the need for heavy statistical assumptions.
+
+One aspect to get accustomed to with simulation-based tests is that p-values are not fixed. If we rerun this randomization test multiple times, the p-value may vary slightly with each iteration. However, with a sufficiently large number of iterations (10,000 in this case), the p-values will stabilize and won’t deviate much from each other. While there may be slight differences, they tend to converge around a common value, giving us a reliable estimate.
+
+```{r, echo=FALSE}
+# Generate plots for four runs (simplified titles for grid layout)
+plot1 <- generate_permutation_plot(Quebec_CO2, p_size = 3.25, grid = TRUE, plot_number = 1)
+plot2 <- generate_permutation_plot(Quebec_CO2, p_size = 3.25, grid = TRUE, plot_number = 2)
+plot3 <- generate_permutation_plot(Quebec_CO2, p_size = 3.25, grid = TRUE, plot_number = 3)
+plot4 <- generate_permutation_plot(Quebec_CO2, p_size = 3.25, grid = TRUE, plot_number = 4)
+
+# Arrange the plots in a 2x2 grid
+combined_plot <- ggarrange(plot1, plot2, plot3, plot4, ncol = 2, nrow = 2)
+
+# Print the combined plot
+print(combined_plot)
+```
+
+As noted, each simulation is unique, but the distribution shapes remain consistent, and the p-values are quite similar across iterations.
+
+Now that we’ve completed our randomization test, despite the non-normality of our data and small sample sizes, we’ve still been able to gather the necessary information to draw conclusions.
+
+If this process feels confusing or daunting, that’s completely understandable. Randomization, like Bootstrapping, relies more on computing power than on traditional mathematical theory. It’s perfectly fine to re-read this and take your time to fully grasp the steps. Once you get past the challenge of retraining your brain to see this new approach to hypothesis testing, you’ll start to appreciate how intuitive and accessible it really is
+
+Non-parametric tests, like this one, represent an increasingly important branch of statistics, offering intuitive and robust solutions. Hopefully, this demonstrates the value and flexibility of these methods for modern statistical analysis.
