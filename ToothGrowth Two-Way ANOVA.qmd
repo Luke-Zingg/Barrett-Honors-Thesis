@@ -1,0 +1,221 @@
+---
+title: "Tooth Growth Two-Way ANOVA"
+format: html
+editor: visual
+---
+
+Hello!
+
+```{r, echo = FALSE, include=FALSE}
+# Load Necessary Libraries
+
+library(ggplot2)
+library(dplyr)
+library(car)  # For Levene's Test
+library(rstatix)  # For normality test and pairwise t-test
+library(ggpubr)  # For visualization
+```
+
+Today, we will be performing a two-way ANOVA using the ToothGrowth dataset. This dataset measures the tooth length of guinea pigs after receiving vitamin C, administered in two different forms: orange juice (`OJ`) and ascorbic acid (`VC`). Additionally, the vitamin C was given in three different dosage levels (`0.5`, `1.0`, `2.0`).
+
+Before we proceed, it’s important that you have a solid understanding of the process for a one-way ANOVA, as the two-way ANOVA builds upon those concepts. While the two-way ANOVA is more complex, it follows the same foundation principles. So, make sure to review those basics if needed, and take your time working through this material.
+
+### Examining the Data:
+
+Let’s start by taking a quick look at the first few rows of our dataset to understand its structure. You’ll see that we’ve already done some reorganizing to get the data into the right format for this test. This kind of data preparation is a common practice in statistics. Organizing and formatting data correctly is a critical part of the analysis process, though it’s not something we focus heavily on in this course. Still, it’s an essential skill for statisticians, as having clean and well-structured data is key to performing valid analyses.
+
+```{r}
+
+# Convert 'supp' and 'dose' to factors
+ToothGrowth <- ToothGrowth %>%
+  mutate(supp = factor(supp),
+         dose = factor(dose))
+
+# Inspect the dataset
+head(ToothGrowth)
+```
+
+As mentioned, our data has **two** separate categorical variables: `supp` and `dose`. This is what makes our data conditioned for a *two*-way ANOVA. Between these two variables, we see our data can be split into *6* different groups, each group containing 10 data points.
+
+| Supplement / Dose: | Orange Juice (`OJ)` | Ascorbic Acid (`VC)` |
+|:------------------:|:-------------------:|:--------------------:|
+|       `0.5`        | x̄ = 13.2, s = 4.46  |  x̄ = 7.98, s = 2.75  |
+|       `1.0`        | x̄ = 22.7, s = 3.91  |  x̄ = 16.8, s = 2.52  |
+|       `2.0`        | x̄ = 26.1, s = 2.66  |  x̄ = 26.1, s = 4.80  |
+
+Before we move on to visualizing our data, let’s briefly explain how the two-way ANOVA works. A key part of this test is checking for an *interaction* between our two categorical variables: supplement type (`supp`) and dosage level (`dose`). The interaction term tells us whether the effect of these two factors on our continuous variable, tooth length (`len`), is influenced by their combination, rather than by each factor independently.
+
+**Example of Interaction in Our Data:**
+
+Suppose we find that at low doses, guinea pigs receiving orange juice (`OJ`) have significantly longer teeth compared to those receiving ascorbic acid (`VC`). But at higher doses, the difference between orange juice and ascorbic acid reverses, with ascorbic acid showing more tooth growth at high doses.
+
+This would indicate an interaction between supplement type and dosage — the effect of one depends on the level or extent of the other. At low doses, orange juice is the superior supplement, but at high doses, ascorbic acid leads to more tooth growth. If this is the case, we can't separate our two categories, because they interact with each other. Thus we need to analyze our groups relative to their level of *both* categorical variables.
+
+If there’s no interaction, we would expect the effect of each factor (supplement and dose) to be consistent across all levels of the other factor, allowing us to analyze them separately. That is to say, the relative relationship between `OJ` and `VC`, would remain somewhat consistent regardless of the `dose` level.
+
+```{r, echo=FALSE}
+
+# Classic and Clean with Light Colors, No Legend
+boxplot_plot_classic_color <- ggplot(ToothGrowth, aes(x = supp, y = len, fill = supp)) +
+  geom_boxplot(width = 0.6) +  # Narrower boxes for a clean look
+  theme_classic(base_size = 14) +  # Classic theme with clean lines
+  scale_fill_manual(values = c("#56B4E9", "#E69F00")) +  # Light blue and orange for supplements
+  labs(
+    title = "Tooth Length by Supplement Type and Dose",
+    x = "Supplement Type",
+    y = "Tooth Length"
+  ) +
+  facet_wrap(~ dose, nrow = 1, labeller = label_both) +  # Facet by dose, label both dose and levels
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    strip.background = element_blank(),  # No background for facet strips
+    strip.text = element_text(face = "bold"),
+    axis.text.x = element_text(face = "bold"),
+    axis.text.y = element_text(color = "black"),  # Black axis labels for clarity
+    legend.position = "none"  # Remove legend
+  )
+
+print(boxplot_plot_classic_color)
+
+```
+
+Looking at this boxplot, it seems we're provided with evidence that there *is* and interaction between `dose` and `supp`. As we can see, with `dose` = .5, `OJ` seems to outperform `VC` by a decent margin. However, by the time `dose` increases to 2, the two have tied up with `VC` seeming to have more variance.
+
+If there were no interaction between `dose` and `supp`, this variation in the performance of `OJ` and `VC`, *depending upon* the dosage wouldn't occur. However, each boxplot only consists of 10 data points, so it's important to run our test to get a sense for if this variation is statistically significant.
+
+### Checking ANOVA Assumptions:
+
+As we go through our assumptions for our ANOVA, we will assume as usual independence of observations.
+
+With this gone, we have two assumptions to inspect. The first, as we've seen before, is that the distribution of the residuals is approximately normal. We've gone through this many times, and how it relates to the Central Limit Theorem, but what matters is since each group only has 10 data points, we need to inspect if there's reason to believe the population distribution of each group is approximately normal. So, we'll run our typical test for normality.
+
+```{r, results='hold', fig.show='hold', echo = FALSE}
+# Function to perform normality test without plotting QQ plot
+perform_normality_test <- function(data, supp_level, dose_level) {
+  sample_data <- na.omit(data %>% filter(supp == supp_level, dose == dose_level) %>% pull(len))
+  test_result <- shapiro.test(sample_data)
+  return(test_result)
+}
+
+# Perform tests for each group
+results_OJ_05 <- perform_normality_test(ToothGrowth, "OJ", 0.5)
+results_OJ_10 <- perform_normality_test(ToothGrowth, "OJ", 1.0)
+results_OJ_20 <- perform_normality_test(ToothGrowth, "OJ", 2.0)
+results_VC_05 <- perform_normality_test(ToothGrowth, "VC", 0.5)
+results_VC_10 <- perform_normality_test(ToothGrowth, "VC", 1.0)
+results_VC_20 <- perform_normality_test(ToothGrowth, "VC", 2.0)
+
+# Extract p-values into a table
+p_values <- data.frame(
+  Group = c("OJ_0.5", "OJ_1.0", "OJ_2.0", "VC_0.5", "VC_1.0", "VC_2.0"),
+  p_Value = c(results_OJ_05$p.value, results_OJ_10$p.value, 
+              results_OJ_20$p.value, results_VC_05$p.value, 
+              results_VC_10$p.value, results_VC_20$p.value)
+)
+
+# Create and display the p-value table
+p_table <- ggtexttable(p_values, rows = NULL, theme = ttheme("mOrange"))
+p_table <- p_table %>% tab_add_title(text = "Test for Normality", face = "bold", size = 12)
+print(p_table)
+```
+
+We can see from our table that each group has a p-value greater than .05. Therefore, we *fail to reject* the claim that the groups come from a normally distributed population. So, we've taken care of our assumption of normality.
+
+Let’s now discuss our final assumption: **Homogeneity of Variances**. This means that the variances of the populations from which the groups are drawn should be roughly equal. In earlier cases, we were able to bypass this assumption using Welch’s t-test or Welch’s ANOVA, which are designed for unequal variances. However, there is no direct Welch equivalent for two-way ANOVAs, so we need to assess this assumption directly here.
+
+While we can’t know the exact population variances, what we’re interested in is whether the variances are close enough to assume equality based on our data. This is where **Levene’s test** comes in. It helps us evaluate whether there is strong evidence that the population variances across groups are significantly different.
+
+Levene’s test works a bit differently from most tests. Like normality tests, we hope to *fail to reject* the null hypothesis. In this case, a p-value greater than 0.05 means there isn’t enough evidence to suggest the variances are unequal, which is what we want for the ANOVA assumptions to hold.
+
+```{r}
+
+# Levene's Test for Homogeneity of Variance
+levene_test_result <- leveneTest(len ~ supp * dose, data = ToothGrowth)
+print(levene_test_result)
+```
+
+Thankfully, in this instance our p-value is greater than .05, meaning we *fail to reject* the claim that our population variances are similar across groups. Though there are alternatives in the world of statistics had this test returned a significant p-value, for the scope of this course, we'll just appreciate that we're good to use the typical two-way ANOVA test.
+
+Now that we've met our assumptions, we're good to proceed to our test.
+
+### Running the ANOVA:
+
+Two-way ANOVAs can be challenging to interpret, especially when deciding how to move forward after seeing the results. In essence, a two-way ANOVA involves three hypothesis tests: one for each main effect (e.g., testing whether `supp` or `dose` has a significant effect), and one for the interaction effect (`supp:dose`).
+
+The interaction test is especially important. If the p-value for the interaction is significant, it means there is evidence that our two categories are intertwined with each other, as previously discussed. This is a crucial finding because it means we need to be careful with our post-hoc tests and interpretations — we cannot simply look at the main effects independently.
+
+While there are many ways to analyze two-way ANOVAs and run post-hoc tests, the key takeaway here is understanding the importance of the interaction. If it’s significant, the focus should be on exploring the interaction effects, and the main effects should not be interpreted in isolation.
+
+We won’t go into every detail of post-hoc tests or advanced methods in this course, but the goal is to give you a solid understanding of the process and the importance of careful, ethical data analysis when using ANOVA.
+
+```{r}
+
+# Perform Two-Way ANOVA
+anova_result <- aov(len ~ supp * dose, data = ToothGrowth)
+summary(anova_result)
+```
+
+The first key result to focus on here is the p-value of 0.02186 for the interaction term (`supp:dose`). As we’ve discussed, this indicates that there is a significant interaction between the two factors. In other words, the effect of one factor (e.g., supplement type) depends on the level of the other factor (e.g., dose).
+
+Additionally, the p-values for both supp and dose independently are significant. With all the p-values showing significance (for the main effects and the interaction), we can proceed with a post hoc test.
+
+In this case, we’ll run a **Tukey post hoc test**, which is similar to the Games-Howell test that we used in the one-way ANOVA process. However, the key difference is that now, each group we compare will consist of combinations of both supp and dose due to the significant interaction.
+
+We’ll focus on the final section of the code’s output, which will show us pairwise comparisons between these supp:dose combinations, allowing us to see exactly where the significant differences lie among the groups.
+
+```{r, results='hold'}
+
+tukey_result <- TukeyHSD(anova_result)
+print(tukey_result)
+```
+
+The Tukey test provides quite a bit of output, starting with t-tests on the supp (supplement) and dose (dosage) categories individually. However, since our interaction term is significant, the most relevant part of the output is the set of 15 paired t-tests that compare the groups formed by combinations of both supp and dose.
+
+These paired tests help us determine which specific combinations of supp and dose differ significantly from one another. To better understand these results, we can visualize this series of t-tests using the plot below. This plot will highlight which pairings show significant differences, making it easier to interpret the interaction between the two categorical variables.
+
+```{r, results='hold', fig.show='hold', echo = FALSE}
+
+tukey_df <- as.data.frame(tukey_result[["supp:dose"]])
+tukey_df$comparison <- rownames(tukey_df)
+
+tukey_plot <- ggplot(tukey_df, aes(x = reorder(comparison, diff), y = diff)) +
+  geom_errorbar(aes(ymin = lwr, ymax = upr), width = 0.2, color = "blue") +
+  geom_point(size = 3, color = "red") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+  coord_flip() +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+    axis.title.x = element_text(size = 14, face = "bold"),
+    axis.title.y = element_text(size = 14, face = "bold"),
+    axis.text = element_text(size = 12)
+  ) +
+  labs(
+    title = "Tukey HSD Test Results",
+    x = "Comparison",
+    y = "Difference in Means"
+  )
+
+print(tukey_plot)
+
+```
+
+For any bars on the plot that include a difference in means of 0, we fail to reject the null hypothesis, meaning there’s insufficient evidence to suggest a significant difference in true means between the two groups. For example, we can see that we *fail to reject* the null hypothesis when comparing VC and OJ at a dosage of 2.
+
+A possible explanation (though speculative) could be that at higher dosages, such as 2, the benefits of vitamin C may plateau, meaning that the method of administration (either VC or OJ) no longer makes a significant difference.
+
+Similarly, we also observe that there’s no significant difference between dose levels of 1 and 2 within the OJ group, suggesting that increasing the dose within the OJ supplement might not lead to significant changes in the response variable.
+
+However, as statisticians, it’s important to remember that our role is not to explain the biological or practical reasons behind why certain pairings are significant or not. Our responsibility is to conduct the appropriate statistical tests ethically, ensure the results are reported accurately, and leave the interpretation of the underlying causes to domain experts.
+
+### Conclusion:
+
+Take a deep breath, you arguably just completed the hardest Quarto demonstration of the course. We’ve just demonstrated how two-way ANOVAs build on the same foundations as one-way ANOVAs, but with a few extra steps to account for interactions between factors.
+
+There are many variations of ANOVA tests and multiple ways to analyze them, so don’t worry if you’re not an expert just yet. The key takeaway here is to develop an intuition for the process—understanding how we moved from running the ANOVA to interpreting p-values and using post-hoc tests.
+
+As long as you’re comfortable with interpreting the results, especially the collection of p-values, and understand the importance of factors like interactions, you’re on the right track. In today’s world, the most important skill is knowing how to ask the right questions from the data and understanding which statistical test is best suited to answer those questions. Whether it’s choosing between a one-way or two-way ANOVA—or another statistical method—being clear about the question you’re trying to answer is crucial.
+
+With advancements in AI and statistical software, we now have tools that can quickly run calculations and generate test statistics and p-values for us. What’s more valuable is the ability to interpret those p-values correctly and understand the logic behind the tests we’re using. Knowing why we organize tests in a certain way, how to properly design them, and how to draw meaningful conclusions from the results is where the real skill lies.
+
+Rather than focusing on manual calculations, the emphasis is on data-driven decision-making and ensuring that the statistical process we follow is rigorous, ethical, and appropriate for the data and the questions at hand. Being able to interpret the results accurately will always outweigh the ability to manually compute them, especially in an era where technology can assist with the heavy lifting!
